@@ -1,5 +1,6 @@
 package com.residential.management.demo.residential.application.internal.commandservices;
 
+import com.residential.management.demo.residential.domain.services.ResidentAssignmentPublisher;
 import com.residential.management.demo.residential.domain.model.aggregates.Building;
 import com.residential.management.demo.residential.domain.model.entities.Unit;
 import com.residential.management.demo.residential.domain.model.entities.UserUnit;
@@ -10,6 +11,7 @@ import com.residential.management.demo.residential.interfaces.rest.resources.Ass
 import com.residential.management.demo.residential.interfaces.rest.resources.CreateBuildingResource;
 import com.residential.management.demo.residential.interfaces.rest.resources.CreateUnitResource;
 import com.residential.management.demo.residential.interfaces.rest.resources.MoveUserToUnitResource;
+import com.residential.management.demo.residential.interfaces.rest.resources.RegisterResidentResource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -34,6 +36,9 @@ class ResidentialCommandServiceImplTest {
 
     @Mock
     private UserUnitRepository userUnitRepository;
+
+    @Mock
+    private ResidentAssignmentPublisher residentAssignmentPublisher;
 
     @InjectMocks
     private ResidentialCommandServiceImpl residentialCommandService;
@@ -212,6 +217,38 @@ class ResidentialCommandServiceImplTest {
 
         verify(userUnitRepository, never())
                 .save(any(UserUnit.class));
+    }
+
+    @Test
+    void registerResidentCreatesPendingLinkAndPublishesEvent() {
+        var building = mock(Building.class);
+        when(building.getIdBuilding()).thenReturn(1L);
+        var unit = mock(Unit.class);
+        when(unit.getIdUnit()).thenReturn(7L);
+        when(unit.getBuilding()).thenReturn(building);
+        when(unit.getUnitNumber()).thenReturn(501);
+        when(unit.getFloor()).thenReturn(5);
+
+        when(unitRepository.findById(7L)).thenReturn(Optional.of(unit));
+        when(buildingRepository.findById(1L)).thenReturn(Optional.of(building));
+        when(userUnitRepository.findByResidentEmailAndUnitIdUnitAndStatus("ana@example.com", 7L, "PENDIENTE"))
+                .thenReturn(java.util.List.of());
+        when(userUnitRepository.save(any(UserUnit.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        var resource = new RegisterResidentResource(
+                "Ana Pérez", "Ana@Example.com ", "999888777", "DNI", "12345678", 1L, 7L);
+
+        var saved = residentialCommandService.registerResident(resource);
+
+        assertEquals("PENDIENTE", saved.getStatus());
+        assertEquals("ana@example.com", saved.getResidentEmail());
+        assertNull(saved.getIdUser());
+        verify(residentAssignmentPublisher).publish(argThat(event ->
+                event.email().equals("ana@example.com")
+                        && event.unitId().equals(7L)
+                        && event.buildingId().equals(1L)
+                        && event.messageId() != null));
     }
 
     @Test

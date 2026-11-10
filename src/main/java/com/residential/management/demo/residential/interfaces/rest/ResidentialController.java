@@ -47,6 +47,13 @@ public class ResidentialController {
         return UserUnitResourceFromEntityAssembler.toResourceFromEntity(userUnit);
     }
 
+    @PostMapping("/residents")
+    @ResponseStatus(HttpStatus.CREATED)
+    public UserUnitResource registerResident(@RequestBody RegisterResidentResource resource) {
+        var userUnit = residentialCommandService.registerResident(resource);
+        return UserUnitResourceFromEntityAssembler.toResourceFromEntity(userUnit);
+    }
+
     @PutMapping("/user-units/move")
     public UserUnitResource moveUserToUnit(@RequestBody MoveUserToUnitResource resource) {
         var userUnit = residentialCommandService.moveUserToUnit(resource);

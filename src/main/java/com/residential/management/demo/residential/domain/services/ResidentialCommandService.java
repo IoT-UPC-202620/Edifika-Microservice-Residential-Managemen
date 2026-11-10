@@ -16,4 +16,6 @@ public interface ResidentialCommandService {
     UserUnit moveUserToUnit(MoveUserToUnitResource resource);
 
     Unit updateUnit(Long idUnit, UpdateUnitResource resource);
+
+    UserUnit registerResident(RegisterResidentResource resource);
 }

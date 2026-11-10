@@ -13,4 +13,8 @@ public interface UserUnitRepository extends JpaRepository<UserUnit, Long> {
     List<UserUnit> findByUnitBuildingIdBuilding(Long idBuilding);
 
     Optional<UserUnit> findByIdUserAndStatus(Long idUser, String status);
+
+    List<UserUnit> findByUnitIdUnitAndStatus(Long idUnit, String status);
+
+    List<UserUnit> findByResidentEmailAndUnitIdUnitAndStatus(String residentEmail, Long idUnit, String status);
 }
