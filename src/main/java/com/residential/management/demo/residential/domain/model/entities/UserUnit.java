@@ -17,8 +17,16 @@ public class UserUnit {
     @JoinColumn(name = "id_unit", nullable = false)
     private Unit unit;
 
-    @Column(name = "id_user", nullable = false)
+    @Column(name = "id_user")
     private Long idUser;
+
+    /**
+     * Correo del residente. Permite crear el vínculo en estado PENDIENTE antes de que
+     * IAM cree el usuario (id_user se completa cuando llega iam.resident.user-created).
+     * Registros existentes creados por assignUserToUnit tienen correo nulo.
+     */
+    @Column(name = "resident_email", length = 320)
+    private String residentEmail;
 
     @Column(name = "start_date", nullable = false)
     private LocalDateTime startDate;
@@ -38,6 +46,13 @@ public class UserUnit {
         this.startDate = startDate;
         this.endDate = endDate;
         this.status = status;
+    }
+
+    public UserUnit(Unit unit, String residentEmail) {
+        this.unit = unit;
+        this.residentEmail = residentEmail;
+        this.startDate = LocalDateTime.now();
+        this.status = "PENDIENTE";
     }
 
     public Long getIdUserUnit() {
@@ -62,6 +77,14 @@ public class UserUnit {
 
     public String getStatus() {
         return status;
+    }
+
+    public String getResidentEmail() {
+        return residentEmail;
+    }
+
+    public void setResidentEmail(String residentEmail) {
+        this.residentEmail = residentEmail;
     }
 
     public void setUnit(Unit unit) {

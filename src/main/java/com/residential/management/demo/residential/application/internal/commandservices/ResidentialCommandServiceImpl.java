@@ -4,6 +4,8 @@ import com.residential.management.demo.residential.domain.model.aggregates.Build
 import com.residential.management.demo.residential.domain.model.entities.Unit;
 import com.residential.management.demo.residential.domain.model.entities.UserUnit;
 import com.residential.management.demo.residential.domain.services.ResidentialCommandService;
+import com.residential.management.demo.residential.domain.services.ResidentAssignmentPublisher;
+import com.residential.management.demo.residential.infrastructure.messaging.events.ResidentAssignedToUnitEvent;
 import com.residential.management.demo.residential.infrastructure.persistence.jpa.repositories.BuildingRepository;
 import com.residential.management.demo.residential.infrastructure.persistence.jpa.repositories.UnitRepository;
 import com.residential.management.demo.residential.infrastructure.persistence.jpa.repositories.UserUnitRepository;
@@ -20,17 +22,20 @@ public class ResidentialCommandServiceImpl implements ResidentialCommandService 
     private final BuildingRepository buildingRepository;
     private final UnitRepository unitRepository;
     private final UserUnitRepository userUnitRepository;
+    private final ResidentAssignmentPublisher residentAssignmentPublisher;
 
 
 
     public ResidentialCommandServiceImpl(
             BuildingRepository buildingRepository,
             UnitRepository unitRepository,
-            UserUnitRepository userUnitRepository
+            UserUnitRepository userUnitRepository,
+            ResidentAssignmentPublisher residentAssignmentPublisher
     ) {
         this.buildingRepository = buildingRepository;
         this.unitRepository = unitRepository;
         this.userUnitRepository = userUnitRepository;
+        this.residentAssignmentPublisher = residentAssignmentPublisher;
     }
 
     @Override
@@ -100,5 +105,62 @@ public class ResidentialCommandServiceImpl implements ResidentialCommandService 
         UpdateUnitFromResourceAssembler.toEntityFromResource(unit, resource, building);
 
         return unitRepository.save(unit);
+    }
+
+    @Override
+    // Sin @Transactional a propósito: el save() hace commit antes de publicar el evento,
+    // así el consumidor y el completado nunca ven un link que no existe.
+    public UserUnit registerResident(RegisterResidentResource resource) {
+        if (resource.email() == null || resource.email().isBlank()) {
+            throw new IllegalArgumentException("El correo es obligatorio");
+        }
+        if (resource.fullName() == null || resource.fullName().isBlank()) {
+            throw new IllegalArgumentException("El nombre completo es obligatorio");
+        }
+
+        var unit = unitRepository.findById(resource.unitId())
+                .orElseThrow(() -> new IllegalArgumentException("Unit not found"));
+
+        var building = buildingRepository.findById(resource.buildingId())
+                .orElseThrow(() -> new IllegalArgumentException("Building not found"));
+
+        if (!java.util.Objects.equals(unit.getBuilding().getIdBuilding(), building.getIdBuilding())) {
+            throw new IllegalArgumentException("La unidad no pertenece a la torre seleccionada");
+        }
+
+        var normalizedEmail = resource.email().trim().toLowerCase();
+
+        // Idempotente a nivel de aplicación: si ya existe un link PENDIENTE para
+        // (email, unitId), lo reutilizamos y republicamos el evento.
+        var pending = userUnitRepository
+                .findByResidentEmailAndUnitIdUnitAndStatus(normalizedEmail, unit.getIdUnit(), "PENDIENTE");
+        if (!pending.isEmpty()) {
+            var existing = pending.get(0);
+            residentAssignmentPublisher.publish(toEvent(resource, normalizedEmail, unit));
+            return existing;
+        }
+
+        var link = new UserUnit(unit, normalizedEmail);
+        var saved = userUnitRepository.save(link);
+        residentAssignmentPublisher.publish(toEvent(resource, normalizedEmail, unit));
+        return saved;
+    }
+
+    private ResidentAssignedToUnitEvent toEvent(RegisterResidentResource resource,
+                                                 String normalizedEmail,
+                                                 Unit unit) {
+        return new ResidentAssignedToUnitEvent(
+                java.util.UUID.randomUUID().toString(),
+                resource.fullName().trim(),
+                normalizedEmail,
+                resource.phone(),
+                resource.documentType(),
+                resource.documentNumber(),
+                unit.getBuilding().getIdBuilding(),
+                unit.getIdUnit(),
+                unit.getUnitNumber(),
+                unit.getFloor(),
+                java.time.LocalDateTime.now().toString()
+        );
     }
 }
