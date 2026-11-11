@@ -1,5 +1,6 @@
 package com.residential.management.demo.residential.domain.model.entities;
 
+import com.residential.management.demo.residential.domain.model.valueobjects.RelationType;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
@@ -23,7 +24,7 @@ public class UserUnit {
     /**
      * Correo del residente. Permite crear el vínculo en estado PENDIENTE antes de que
      * IAM cree el usuario (id_user se completa cuando llega iam.resident.user-created).
-     * Registros existentes creados por assignUserToUnit tienen correo nulo.
+     * Registros antiguos creados por assignUserToUnit tienen id_user y correo nulo.
      */
     @Column(name = "resident_email", length = 320)
     private String residentEmail;
@@ -37,22 +38,39 @@ public class UserUnit {
     @Column(name = "status", nullable = false, length = 80)
     private String status;
 
+    /**
+     * Motivo cuando el vínculo queda FAILED (p. ej. «La unidad ya tiene un titular activo»
+     * o «El correo ya está registrado»). Nulo en PENDIENTE/ACTIVE/INACTIVE.
+     */
+    @Column(name = "failure_reason", length = 255)
+    private String failureReason;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "relation_type", length = 20)
+    private RelationType relationType;
+
     public UserUnit() {
     }
 
     public UserUnit(Unit unit, Long idUser, LocalDateTime startDate, LocalDateTime endDate, String status) {
+        this(unit, idUser, startDate, endDate, status, RelationType.OWNER);
+    }
+
+    public UserUnit(Unit unit, Long idUser, LocalDateTime startDate, LocalDateTime endDate, String status, RelationType relationType) {
         this.unit = unit;
         this.idUser = idUser;
         this.startDate = startDate;
         this.endDate = endDate;
         this.status = status;
+        this.relationType = relationType != null ? relationType : RelationType.OWNER;
     }
 
-    public UserUnit(Unit unit, String residentEmail) {
+    public UserUnit(Unit unit, String residentEmail, RelationType relationType) {
         this.unit = unit;
         this.residentEmail = residentEmail;
         this.startDate = LocalDateTime.now();
         this.status = "PENDIENTE";
+        this.relationType = relationType != null ? relationType : RelationType.OWNER;
     }
 
     public Long getIdUserUnit() {
@@ -77,6 +95,23 @@ public class UserUnit {
 
     public String getStatus() {
         return status;
+    }
+
+    public RelationType getRelationType() {
+        // Registros anteriores a relation_type se consideran titulares (OWNER)
+        return relationType != null ? relationType : RelationType.OWNER;
+    }
+
+    public void setRelationType(RelationType relationType) {
+        this.relationType = relationType;
+    }
+
+    public String getFailureReason() {
+        return failureReason;
+    }
+
+    public void setFailureReason(String failureReason) {
+        this.failureReason = failureReason;
     }
 
     public String getResidentEmail() {
