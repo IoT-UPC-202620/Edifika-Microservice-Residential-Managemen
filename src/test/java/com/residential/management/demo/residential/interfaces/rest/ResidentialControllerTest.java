@@ -108,7 +108,8 @@ class ResidentialControllerTest {
                 1L,
                 LocalDateTime.now(),
                 null,
-                "ACTIVE"
+                "ACTIVE",
+                "OWNER"
         );
 
         var unit = mock(Unit.class);

@@ -6,11 +6,14 @@ import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
+import org.springframework.amqp.rabbit.config.RetryInterceptorBuilder;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.rabbit.retry.RejectAndDontRequeueRecoverer;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.retry.interceptor.RetryOperationsInterceptor;
 
 /**
  * Topología del lado Residential:
@@ -78,13 +81,27 @@ public class RabbitMqConfiguration {
         return template;
     }
 
+    // 3 intentos, back-off exponencial 1s x2 con tope 10s. Stateless: el mensaje queda
+    // unacked durante los reintentos; agotados, RejectAndDontRequeueRecoverer lo rechaza
+    // (requeue=false) y la DLX lo rutea a la DLQ de la cola.
+    @Bean
+    public RetryOperationsInterceptor retryOperationsInterceptor() {
+        return RetryInterceptorBuilder.stateless()
+                .maxAttempts(3)
+                .backOffOptions(1_000L, 2.0, 10_000L)
+                .recoverer(new RejectAndDontRequeueRecoverer())
+                .build();
+    }
+
     @Bean
     public SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(
             ConnectionFactory connectionFactory,
-            Jackson2JsonMessageConverter converter) {
+            Jackson2JsonMessageConverter converter,
+            RetryOperationsInterceptor retryOperationsInterceptor) {
         var factory = new SimpleRabbitListenerContainerFactory();
         factory.setConnectionFactory(connectionFactory);
         factory.setMessageConverter(converter);
+        factory.setAdviceChain(retryOperationsInterceptor);
         return factory;
     }
 }

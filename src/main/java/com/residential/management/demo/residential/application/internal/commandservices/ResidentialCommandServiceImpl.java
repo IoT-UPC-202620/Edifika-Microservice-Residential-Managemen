@@ -1,10 +1,14 @@
 package com.residential.management.demo.residential.application.internal.commandservices;
 
+import com.residential.management.demo.residential.domain.exceptions.EmailAlreadyRegisteredException;
+import com.residential.management.demo.residential.domain.exceptions.TitularActivoException;
 import com.residential.management.demo.residential.domain.model.aggregates.Building;
 import com.residential.management.demo.residential.domain.model.entities.Unit;
 import com.residential.management.demo.residential.domain.model.entities.UserUnit;
+import com.residential.management.demo.residential.domain.model.valueobjects.RelationType;
 import com.residential.management.demo.residential.domain.services.ResidentialCommandService;
 import com.residential.management.demo.residential.domain.services.ResidentAssignmentPublisher;
+import com.residential.management.demo.residential.infrastructure.iam.IAMEmailVerificationClient;
 import com.residential.management.demo.residential.infrastructure.messaging.events.ResidentAssignedToUnitEvent;
 import com.residential.management.demo.residential.infrastructure.persistence.jpa.repositories.BuildingRepository;
 import com.residential.management.demo.residential.infrastructure.persistence.jpa.repositories.UnitRepository;
@@ -23,6 +27,7 @@ public class ResidentialCommandServiceImpl implements ResidentialCommandService 
     private final UnitRepository unitRepository;
     private final UserUnitRepository userUnitRepository;
     private final ResidentAssignmentPublisher residentAssignmentPublisher;
+    private final IAMEmailVerificationClient iamEmailVerificationClient;
 
 
 
@@ -30,12 +35,14 @@ public class ResidentialCommandServiceImpl implements ResidentialCommandService 
             BuildingRepository buildingRepository,
             UnitRepository unitRepository,
             UserUnitRepository userUnitRepository,
-            ResidentAssignmentPublisher residentAssignmentPublisher
+            ResidentAssignmentPublisher residentAssignmentPublisher,
+            IAMEmailVerificationClient iamEmailVerificationClient
     ) {
         this.buildingRepository = buildingRepository;
         this.unitRepository = unitRepository;
         this.userUnitRepository = userUnitRepository;
         this.residentAssignmentPublisher = residentAssignmentPublisher;
+        this.iamEmailVerificationClient = iamEmailVerificationClient;
     }
 
     @Override
@@ -65,6 +72,12 @@ public class ResidentialCommandServiceImpl implements ResidentialCommandService 
             throw new RuntimeException("User is already assigned to this unit");
         }
 
+        var relationType = AssignUserToUnitFromResourceAssembler.parseRelationType(resource.relationType());
+        var isActiveOwner = isActive(resource.status()) && relationType == RelationType.OWNER;
+        if (isActiveOwner && hasActiveTitular(resource.idUnit())) {
+            throw new TitularActivoException();
+        }
+
         var userUnit = AssignUserToUnitFromResourceAssembler.toEntityFromResource(resource, unit);
         return userUnitRepository.save(userUnit);
     }
@@ -72,6 +85,13 @@ public class ResidentialCommandServiceImpl implements ResidentialCommandService 
 
     @Override
     public UserUnit moveUserToUnit(MoveUserToUnitResource resource) {
+        var newUnit = unitRepository.findById(resource.newIdUnit())
+                .orElseThrow(() -> new RuntimeException("New unit not found"));
+
+        if (hasActiveTitular(resource.newIdUnit())) {
+            throw new TitularActivoException();
+        }
+
         var currentAssignment = userUnitRepository
                 .findByIdUserAndStatus(resource.idUser(), "ACTIVE")
                 .orElseThrow(() -> new RuntimeException("Active assignment not found for this user"));
@@ -79,9 +99,6 @@ public class ResidentialCommandServiceImpl implements ResidentialCommandService 
         currentAssignment.setEndDate(resource.moveDate());
         currentAssignment.setStatus("INACTIVE");
         userUnitRepository.save(currentAssignment);
-
-        var newUnit = unitRepository.findById(resource.newIdUnit())
-                .orElseThrow(() -> new RuntimeException("New unit not found"));
 
         var newAssignment = new UserUnit(
                 newUnit,
@@ -130,6 +147,18 @@ public class ResidentialCommandServiceImpl implements ResidentialCommandService 
 
         var normalizedEmail = resource.email().trim().toLowerCase();
 
+        // E2: un titular ACTIVE OWNER ya vinculado bloquea el registro (PENDIENTE no bloquea).
+        // Guard local antes de llamar a IAM: sin vínculo ni eventos si hay titular activo.
+        if (hasActiveTitular(unit.getIdUnit())) {
+            throw new TitularActivoException();
+        }
+
+        // E3 pre-chequeo síncrono contra IAM (fail closed): sin vínculo ni eventos
+        // si el correo ya existe o si IAM no se pudo consultar.
+        if (iamEmailVerificationClient.emailExists(normalizedEmail)) {
+            throw new EmailAlreadyRegisteredException();
+        }
+
         // Idempotente a nivel de aplicación: si ya existe un link PENDIENTE para
         // (email, unitId), lo reutilizamos y republicamos el evento.
         var pending = userUnitRepository
@@ -140,10 +169,22 @@ public class ResidentialCommandServiceImpl implements ResidentialCommandService 
             return existing;
         }
 
-        var link = new UserUnit(unit, normalizedEmail);
+        var link = new UserUnit(unit, normalizedEmail, RelationType.OWNER);
         var saved = userUnitRepository.save(link);
         residentAssignmentPublisher.publish(toEvent(resource, normalizedEmail, unit));
         return saved;
+    }
+
+    private boolean isActive(String status) {
+        return status != null && status.trim().equalsIgnoreCase("ACTIVE");
+    }
+
+    private boolean hasActiveTitular(Long idUnit) {
+        return userUnitRepository.findByUnitIdUnitAndStatus(idUnit, "ACTIVE")
+                .stream()
+                .anyMatch(assignment ->
+                        assignment.getEndDate() == null
+                                && assignment.getRelationType() == RelationType.OWNER);
     }
 
     private ResidentAssignedToUnitEvent toEvent(RegisterResidentResource resource,
