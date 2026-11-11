@@ -8,6 +8,7 @@ import com.residential.management.demo.residential.interfaces.rest.transform.Uni
 import com.residential.management.demo.residential.interfaces.rest.transform.UserUnitResourceFromEntityAssembler;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -66,6 +67,31 @@ public class ResidentialController {
                 .stream()
                 .map(BuildingResourceFromEntityAssembler::toResourceFromEntity)
                 .toList();
+    }
+
+    @GetMapping("/buildings/{idBuilding}")
+    public BuildingResource getBuildingById(@PathVariable Long idBuilding) {
+        return residentialQueryService.getBuildingById(idBuilding)
+                .map(BuildingResourceFromEntityAssembler::toResourceFromEntity)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Building not found"));
+    }
+
+    @GetMapping("/units/{idUnit}")
+    public UnitResource getUnitById(@PathVariable Long idUnit) {
+        return residentialQueryService.getUnitById(idUnit)
+                .map(UnitResourceFromEntityAssembler::toResourceFromEntity)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Unit not found"));
+    }
+
+    /**
+     * Residencia actual del usuario (incluye idBuilding). La usa la app móvil al iniciar
+     * sesión, porque el JWT del IAM no conoce edificios.
+     */
+    @GetMapping("/users/{idUser}/active-unit")
+    public UserUnitResource getActiveUnitOfUser(@PathVariable Long idUser) {
+        return residentialQueryService.getActiveUserUnitByUserId(idUser)
+                .map(UserUnitResourceFromEntityAssembler::toResourceFromEntity)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Active unit not found for this user"));
     }
 
     @GetMapping("/buildings/{idBuilding}/units")

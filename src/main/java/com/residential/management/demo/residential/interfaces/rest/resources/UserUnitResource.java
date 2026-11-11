@@ -9,6 +9,7 @@ public record UserUnitResource(
         LocalDateTime startDate,
         LocalDateTime endDate,
         String status,
-        String residentEmail
+        String residentEmail,
+        Long idBuilding
 ) {
 }

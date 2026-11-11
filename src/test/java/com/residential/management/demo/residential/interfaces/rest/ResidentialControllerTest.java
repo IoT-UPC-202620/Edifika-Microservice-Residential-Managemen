@@ -250,4 +250,72 @@ class ResidentialControllerTest {
         verify(residentialQueryService, times(1))
                 .getResidentsByBuildingId(1L);
     }
+
+    @Test
+    void getBuildingById() {
+        var building = mock(Building.class);
+        when(building.getIdBuilding()).thenReturn(1L);
+        when(building.getName()).thenReturn("Edificio Central");
+        when(residentialQueryService.getBuildingById(1L)).thenReturn(java.util.Optional.of(building));
+
+        var result = residentialController.getBuildingById(1L);
+
+        assertEquals(1L, result.idBuilding());
+        assertEquals("Edificio Central", result.name());
+    }
+
+    @Test
+    void getBuildingByIdNotFound() {
+        when(residentialQueryService.getBuildingById(99L)).thenReturn(java.util.Optional.empty());
+
+        var error = assertThrows(org.springframework.web.server.ResponseStatusException.class,
+                () -> residentialController.getBuildingById(99L));
+        assertEquals(404, error.getStatusCode().value());
+    }
+
+    @Test
+    void getUnitById() {
+        var building = mock(Building.class);
+        var unit = mock(Unit.class);
+        when(building.getIdBuilding()).thenReturn(1L);
+        when(unit.getIdUnit()).thenReturn(10L);
+        when(unit.getBuilding()).thenReturn(building);
+        when(unit.getUnitNumber()).thenReturn(101);
+        when(residentialQueryService.getUnitById(10L)).thenReturn(java.util.Optional.of(unit));
+
+        var result = residentialController.getUnitById(10L);
+
+        assertEquals(10L, result.idUnit());
+        assertEquals(101, result.unitNumber());
+    }
+
+    @Test
+    void getActiveUnitOfUserIncludesBuilding() {
+        var building = mock(Building.class);
+        var unit = mock(Unit.class);
+        var userUnit = mock(UserUnit.class);
+        when(building.getIdBuilding()).thenReturn(1L);
+        when(unit.getIdUnit()).thenReturn(10L);
+        when(unit.getBuilding()).thenReturn(building);
+        when(userUnit.getIdUserUnit()).thenReturn(100L);
+        when(userUnit.getUnit()).thenReturn(unit);
+        when(userUnit.getIdUser()).thenReturn(7L);
+        when(userUnit.getStatus()).thenReturn("ACTIVE");
+        when(residentialQueryService.getActiveUserUnitByUserId(7L)).thenReturn(java.util.Optional.of(userUnit));
+
+        var result = residentialController.getActiveUnitOfUser(7L);
+
+        assertEquals(10L, result.idUnit());
+        assertEquals(1L, result.idBuilding());
+        assertEquals("ACTIVE", result.status());
+    }
+
+    @Test
+    void getActiveUnitOfUserNotFound() {
+        when(residentialQueryService.getActiveUserUnitByUserId(7L)).thenReturn(java.util.Optional.empty());
+
+        var error = assertThrows(org.springframework.web.server.ResponseStatusException.class,
+                () -> residentialController.getActiveUnitOfUser(7L));
+        assertEquals(404, error.getStatusCode().value());
+    }
 }

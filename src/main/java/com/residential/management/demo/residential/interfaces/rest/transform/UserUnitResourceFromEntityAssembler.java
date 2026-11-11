@@ -13,7 +13,8 @@ public class UserUnitResourceFromEntityAssembler {
                 entity.getStartDate(),
                 entity.getEndDate(),
                 entity.getStatus(),
-                entity.getResidentEmail()
+                entity.getResidentEmail(),
+                entity.getUnit().getBuilding() != null ? entity.getUnit().getBuilding().getIdBuilding() : null
         );
     }
 }

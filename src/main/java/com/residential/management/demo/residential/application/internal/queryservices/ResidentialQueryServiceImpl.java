@@ -10,6 +10,7 @@ import com.residential.management.demo.residential.infrastructure.persistence.jp
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class ResidentialQueryServiceImpl implements ResidentialQueryService {
@@ -41,5 +42,20 @@ public class ResidentialQueryServiceImpl implements ResidentialQueryService {
     @Override
     public List<UserUnit> getResidentsByBuildingId(Long idBuilding) {
         return userUnitRepository.findByUnitBuildingIdBuilding(idBuilding);
+    }
+
+    @Override
+    public Optional<Building> getBuildingById(Long idBuilding) {
+        return buildingRepository.findById(idBuilding);
+    }
+
+    @Override
+    public Optional<Unit> getUnitById(Long idUnit) {
+        return unitRepository.findById(idUnit);
+    }
+
+    @Override
+    public Optional<UserUnit> getActiveUserUnitByUserId(Long idUser) {
+        return userUnitRepository.findByIdUserAndStatus(idUser, "ACTIVE");
     }
 }
