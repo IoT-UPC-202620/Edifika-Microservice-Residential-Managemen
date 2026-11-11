@@ -7,6 +7,7 @@ public record AssignUserToUnitResource(
         Long idUser,
         LocalDateTime startDate,
         LocalDateTime endDate,
-        String status
+        String status,
+        String relationType
 ) {
 }
