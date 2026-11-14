@@ -40,6 +40,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             UsernamePasswordAuthenticationToken auth =
                     new UsernamePasswordAuthenticationToken(username, null, authorities);
+            // user_id (claim de IAM) para endpoints "propios": /residents/me y control de acceso por unidad
+            auth.setDetails(getUserIdFromToken(token));
             SecurityContextHolder.getContext().setAuthentication(auth);
         }
         filterChain.doFilter(request, response);
@@ -79,6 +81,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return "unknown";
         } catch (Exception e) {
             return "invalid";
+        }
+    }
+
+    private Long getUserIdFromToken(String token) {
+        try {
+            SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
+            Object userId = Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload().get("user_id");
+            return userId == null ? null : Long.valueOf(userId.toString());
+        } catch (Exception e) {
+            return null;
         }
     }
 
