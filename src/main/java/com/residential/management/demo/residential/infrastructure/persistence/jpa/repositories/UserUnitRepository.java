@@ -17,4 +17,9 @@ public interface UserUnitRepository extends JpaRepository<UserUnit, Long> {
     List<UserUnit> findByUnitIdUnitAndStatus(Long idUnit, String status);
 
     List<UserUnit> findByResidentEmailAndUnitIdUnitAndStatus(String residentEmail, Long idUnit, String status);
+
+    // Vinculos de un usuario (mas reciente primero): /residents/me y control de acceso por unidad
+    List<UserUnit> findByIdUserAndStatusOrderByStartDateDesc(Long idUser, String status);
+
+    List<UserUnit> findByIdUser(Long idUser);
 }
